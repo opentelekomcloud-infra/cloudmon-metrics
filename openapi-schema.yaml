@@ -1,0 +1,223 @@
+openapi: 3.0.0
+servers:
+  - url: http://cloudmon.eco.tsi-dev.otc-service.com
+info:
+  title: CloudMon
+  version: 1.0.0
+  description: This document describes various parts of the CloudMon
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+tags:
+  - name: metrics
+    description: All about metrics
+  - name: maintenances
+    description: All about maintenance windows
+paths:
+  /health:
+    get:
+      tags:
+        - metrics
+      summary: Get Platform health metrics
+      description:
+        Get platform health metrics. Server support querying metrics for up to
+        2 years old. Older metrics are compressed on the server to save space
+        what leads to reducing data precision over the time. Currently metrics
+        are stored with 10s precision first 10 days, 1m precision next 40 days,
+        10m for next 3 years). Afterwards metrics disappear.
+      operationId: "listHealthMetrics"
+      parameters:
+        - name: from
+          in: query
+          description: Start point to query metrics
+          schema:
+            type: string
+            format: date-time
+          example: 2022-07-21T17:32:28Z
+        - name: to
+          in: query
+          description: End point to query metrics
+          schema:
+            type: string
+            format: date-time
+          example: 2022-07-21T17:32:28Z
+        - name: maxDataPoints
+          in: query
+          description: Limit amount of datapoints per service
+          schema:
+            type: integer
+            format: int32
+            maximum: 1024
+          example: 100
+        - name: service
+          in: query
+          description:
+            Service name to use as a limit. Repeat the parameter to query
+            metrics for multiple services.
+          schema:
+            type: string
+          style: form
+          explode: true
+          example: ecs
+      responses:
+        200:
+          description: Metrics matching the query
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceData'
+                example:
+                  - name: ecs
+                    category: compute
+                    metrics: [
+                      [1450754160000, 0],
+                      [1450754170000, 1],
+                      [1450754180000, 2]
+                    ]
+                  - name: network
+                    category: network
+                    metrics: [
+                      [1450754160000, 0],
+                      [1450754170000, 1],
+                      [1450754180000, 2]
+                    ]
+        404:
+          description: Not Found
+  /maintenances:
+    get:
+      tags:
+        - maintenances
+      summary: Get known Maintenance windows
+      description:
+        Get list of service maintenances
+      operationId: "listMaintenances"
+      parameters:
+        - name: from
+          in: query
+          description:
+            Starting point to query maintenance windows. Maintenances that are
+            happening between from and to are returned.
+          schema:
+            type: string
+            format: date-time
+          example: 2022-07-21T17:32:28Z
+        - name: to
+          in: query
+          description:
+            End point to query maintenance windows. Maintenances that are
+            happening between from and to are returned.
+          schema:
+            type: string
+            format: date-time
+          example: 2022-07-21T17:32:28Z
+        - name: service
+          in: query
+          description:
+            Service name filter to limit maintenance windows for. Repeat to
+            query multiple services. Not specifying parameter will return all
+            services mathing other filters.
+          schema:
+            type: string
+          style: form
+          explode: true
+          example: ecs
+      responses:
+        200:
+          description: Maintenance windows matching the query
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceWindowData'
+externalDocs:
+  description: See AsyncAPI example
+  url: https://mermade.github.io/shins/asyncapi.html
+components:
+  schemas:
+    ServiceData:
+      description: Service metrics
+      properties:
+        name:
+          type: string
+          description: Service name
+        category:
+          type: string
+          description: Service category
+        metrics:
+          type: array
+          description: Service metrics per region
+          items:
+            type: object
+            description: "Region metrics"
+            properties:
+              region:
+                type: string
+                description: Region name
+              datapoints:
+                $ref: '#/components/schemas/datapoints'
+      example:
+        name: ecs
+        category: compute
+        metrics:
+          - region: eu-de
+            datapoints: [
+              [1450754160000, 0],
+              [1450754170000, 1],
+              [1450754180000, 2]
+            ]
+          - region: eu-nl
+            datapoints: [
+              [1450754160000, 0],
+              [1450754170000, 1],
+              [1450754180000, 2]
+            ]
+    datapoints:
+      type: array
+      description: Service Metrics datapoints array
+      items:
+        $ref: '#/components/schemas/datapoint'
+    datapoint:
+      type: array
+      description: |
+        Array of precisely 2 elements. First element is a unix timestamp with
+        milliseconds, while second one is a value at the time [0-2]. Value "0"
+        means service is running without issues. "1" - service degradation, "2"
+        - service outage
+      items:
+        type: number
+      minItems: 2
+      maxItems: 2
+      example:
+        - 1450754160000
+        - 2
+    MaintenanceWindowData:
+      type: object
+      description: Planned maintenance information
+      properties:
+        service:
+          type: string
+          description: Service name
+        region:
+          type: string
+          description: Region name
+        start:
+          type: string
+          format: date-time
+          description: Maintenance window start datetime
+        end:
+          type: string
+          format: date-time
+          description: Maintenance window end datetime
+        reason:
+          type: string
+          description:
+            Optional reason or description of the planned maintenance.
+      example:
+        service: ecs
+        region: eu-de
+        start: 2022-01-02T12:00:00Z
+        to: 2022-01-02T13:00:00Z
+        reason: Service upgrade
